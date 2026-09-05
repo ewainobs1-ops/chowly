@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { getMenu, placeOrder, getOrder, submitComplaint, submitPayment } from './services/api';
 
+const ORDER_KEY = 'chowly_order_id';
+
 export default function CustomerView() {
   const [menu, setMenu] = useState([]);
   const [customerName, setCustomerName] = useState('');
@@ -11,10 +13,24 @@ export default function CustomerView() {
   const [complaintText, setComplaintText] = useState('');
   const [rating, setRating] = useState(3);
   const [message, setMessage] = useState('');
+  const [loadingOrder, setLoadingOrder] = useState(true);
   const pollRef = useRef(null);
 
   useEffect(() => {
     getMenu().then(res => setMenu(res.data)).catch(() => setMessage('Could not load the menu.'));
+  }, []);
+
+  // on mount, restore an in-progress order from this browser (survives tab switches and refreshes)
+  useEffect(() => {
+    const savedId = localStorage.getItem(ORDER_KEY);
+    if (savedId) {
+      getOrder(savedId)
+        .then(res => setOrder(res.data))
+        .catch(() => localStorage.removeItem(ORDER_KEY))
+        .finally(() => setLoadingOrder(false));
+    } else {
+      setLoadingOrder(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -49,6 +65,7 @@ export default function CustomerView() {
       const res = await placeOrder({ customerName, phoneNumber, items });
       setOrder(res.data.order);
       setWaitingTime(res.data.estimatedWaitingTime);
+      localStorage.setItem(ORDER_KEY, res.data.order.OrderID);
     } catch (err) {
       setMessage(err.response?.data?.error || 'Could not place the order.');
     }
@@ -71,13 +88,27 @@ export default function CustomerView() {
 
   const handlePayment = async () => {
     try {
-      const res = await submitPayment(order.OrderID, { amount: orderTotal(), method: 'Card' });
+      await submitPayment(order.OrderID, { amount: orderTotal(), method: 'Card' });
       setOrder(prev => ({ ...prev, OrderStatus: 'Paid' }));
       setMessage(`Payment recorded (pretend payment). Amount: ₦${orderTotal()}`);
     } catch (err) {
       setMessage(err.response?.data?.error || 'Could not record payment.');
     }
   };
+
+  const startNewOrder = () => {
+    localStorage.removeItem(ORDER_KEY);
+    setOrder(null);
+    setWaitingTime(null);
+    setCart({});
+    setCustomerName('');
+    setPhoneNumber('');
+    setMessage('');
+  };
+
+  if (loadingOrder) {
+    return <div className="panel"><p>Loading...</p></div>;
+  }
 
   if (order) {
     return (
@@ -114,7 +145,12 @@ export default function CustomerView() {
           </div>
         )}
 
-        {order.OrderStatus === 'Paid' && <p>Thank you, your payment has been recorded. Enjoy the rest of your visit.</p>}
+        {order.OrderStatus === 'Paid' && (
+          <div className="section">
+            <p>Thank you, your payment has been recorded. Enjoy the rest of your visit.</p>
+            <button onClick={startNewOrder}>Start a new order</button>
+          </div>
+        )}
 
         {message && <p className="message">{message}</p>}
       </div>
