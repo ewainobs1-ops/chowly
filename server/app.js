@@ -11,7 +11,7 @@ const paymentRoutes = require('./routes/payments');
 const app = express();
 app.use(cors());
 app.use(express.json());
-
+app.get('/api/ping', (req, res) => res.json({ ok: true }));
 app.use('/api/menu', menuRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/orders', orderRoutes);
